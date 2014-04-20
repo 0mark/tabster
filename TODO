@@ -1,0 +1,10 @@
+TODO
+====
+
+ - add the tree
+   we like trees
+ - add missing commands
+ - support "stupid" plugs
+  - Hook into PropertyNotify event of child widgets (GtkSocket) and listen
+    for title change to reflect tab title.
+  - provice key handling of some kind
