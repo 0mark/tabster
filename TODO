@@ -3,6 +3,7 @@ TODO
 
  - add the tree
    we like trees
+ - add session stuff
  - add missing commands
  - support "stupid" plugs
   - Hook into PropertyNotify event of child widgets (GtkSocket) and listen

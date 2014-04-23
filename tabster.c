@@ -154,6 +154,15 @@ gboolean checkfifo(gpointer data) {
 			tabster.socket_list = g_list_prepend(tabster.socket_list, cd);
 	    }
 
+	    if(!g_strcmp0(cmd[0], "cnew")) {
+	    }
+
+	    if(!g_strcmp0(cmd[0], "bnew")) {
+	    }
+
+	    if(!g_strcmp0(cmd[0], "bcnew")) {
+	    }
+
 	    if(!g_strcmp0(cmd[0], "tabtitle")) {
 	        gchar** lbl = g_strsplit(cmd[1], " ", 2);
 	        int pid = atoi(lbl[0]);
@@ -186,6 +195,9 @@ gboolean checkfifo(gpointer data) {
 			ContainerData* cd = l->data;
 		    g_spawn_close_pid(cd->pid);
 		    gtk_notebook_remove_page(GTK_NOTEBOOK(tabster.notebook), page);
+	    }
+
+	    if(!g_strcmp0(cmd[0], "treeclose")) {
 	    }
 
 	    if(!g_strcmp0(cmd[0], "goto")) {

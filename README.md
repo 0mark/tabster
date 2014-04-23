@@ -21,25 +21,32 @@ Operation
 The protocol-handling of Tabster is much likely to that of uzbltreetab,
 except das commands spawning new tabs need to get a commandline of what
 to spawn.
-Tabster opens a FIFO /tmp/tabster (it already on the todo list to fix
-that), listening for commands:
+Tabster opens a FIFO /tmp/tabsterPID, listening for commands:
 
  - new CMD %d
    opens a new tab, spawn CMD with %d replaced with the socket
- - cnew CMD %d
+ x cnew CMD %d
    open in next layer
- - bnew CMD %d
+ x bnew CMD %d
    open in background
- - bcnew CMD %d
+ x bcnew CMD %d
    open in background in next layer
  - next
  - prev
  - close
- - goto
- - move
- - attach
+ x treeclose
+ - goto NUM
+ - move NUM
+ x attach NUM
  - hidetree
- - sjowtree
+ - showtree
+
+A environment variable "TABSTER_PID" is set, so a uzbl bind could look like this:
+
+    bind tn = sh 'echo "new uzbl -s %d" > /tmp/tabster$TABSTER_PID'
+
+A bit confusing: "%d" is replaced by tabster with the socket of the plug, while
+"$TABSTER_PID" is replaced by the shell with the corresponding environment variable.
 
 Contact
 =======
