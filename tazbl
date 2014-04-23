@@ -1,0 +1,14 @@
+#!/bin/bash
+
+tabster &
+TABSTER_PID=$!
+
+while [ ! -p /tmp/tabster$TABSTER_PID ]; do
+  sleep 0.1
+done
+
+echo "new uzbl -s %d" > /tmp/tabster$TABSTER_PID
+
+sleep 1
+
+wait $TABSTER_PID
