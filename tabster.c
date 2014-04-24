@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2014 Stefan Mark <mark at unserver dot de>
  * Copyright (c) 2011 Thomas Adam <thomas@xteddy.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -15,7 +16,6 @@
  */
 
 #define _XOPEN_SOURCE
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,34 +30,24 @@
 struct ContainerData_ {
 	int id;
 	GtkWidget* socket;
-	// GdkNativeWindow xwin_id;
-	// gboolean has_plug;
 	int pid;
 	gchar* uri;
 } typedef ContainerData;
-
-// enum {
-// 	COMMAND_0,
-// 	COMMAND_PRINT_XID
-// };
 
 struct Tabster_ {
 	GtkWidget *window;
 	GtkWidget *notebook;
 	GtkWidget *vbox;
-	// int next_socket_id;
 
 	GList *socket_list;
-	// int current;
 
 	int fifofd;
     char fifobuf[1024];
-    //int fp;
 } typedef Tabster;
 
 static void die(const char *errstr, ...);
 static void page_removed_cb(GtkNotebook *, GtkWidget *, guint, gpointer);
-static void new_tab_page(GtkWidget *);
+static void new_tab_page(GtkWidget *, gboolean bg);
 static ContainerData* setup_new_socket_for_plug();
 static int spawn(gchar* cmd, int socket);
 static gint by_pid(gconstpointer data, gconstpointer pid);
@@ -86,12 +76,17 @@ void page_removed_cb(GtkNotebook *nb, GtkWidget *widget, guint id, gpointer data
 	g_free(cd->uri);
 	g_free(cd);
 	tabster.socket_list = g_list_remove(tabster.socket_list, l->data);
+	if(!g_list_length(tabster.socket_list)) {
+		g_list_free(tabster.socket_list);
+		gtk_main_quit();
+	}
 }
 
-void new_tab_page(GtkWidget *socket) {
+void new_tab_page(GtkWidget *socket, gboolean bg) {
 	gtk_widget_show(socket);
 	gtk_notebook_append_page(GTK_NOTEBOOK(tabster.notebook), socket, NULL);
-	gtk_notebook_set_current_page(GTK_NOTEBOOK(tabster.notebook), -1);
+	if(bg!=TRUE)
+		gtk_notebook_set_current_page(GTK_NOTEBOOK(tabster.notebook), -1);
 	gtk_notebook_set_tab_reorderable(GTK_NOTEBOOK(tabster.notebook), socket, TRUE);
     gtk_widget_set_can_focus(GTK_WIDGET(tabster.notebook), FALSE);
 }
@@ -149,7 +144,7 @@ gboolean checkfifo(gpointer data) {
 	    
 	    if(!g_strcmp0(cmd[0], "new")) {
 			ContainerData* cd = setup_new_socket_for_plug();	    	
-			new_tab_page(GTK_WIDGET(cd->socket));
+			new_tab_page(GTK_WIDGET(cd->socket), TRUE);
 	    	cd->pid = spawn(cmd[1], gtk_socket_get_id(GTK_SOCKET(cd->socket)));
 			tabster.socket_list = g_list_prepend(tabster.socket_list, cd);
 	    }
@@ -158,6 +153,10 @@ gboolean checkfifo(gpointer data) {
 	    }
 
 	    if(!g_strcmp0(cmd[0], "bnew")) {
+			ContainerData* cd = setup_new_socket_for_plug();	    	
+			new_tab_page(GTK_WIDGET(cd->socket), TRUE);
+	    	cd->pid = spawn(cmd[1], gtk_socket_get_id(GTK_SOCKET(cd->socket)));
+			tabster.socket_list = g_list_prepend(tabster.socket_list, cd);
 	    }
 
 	    if(!g_strcmp0(cmd[0], "bcnew")) {
@@ -167,8 +166,11 @@ gboolean checkfifo(gpointer data) {
 	        gchar** lbl = g_strsplit(cmd[1], " ", 2);
 	        int pid = atoi(lbl[0]);
 	        GList* l = g_list_find_custom(tabster.socket_list, &pid, by_pid);
-	        if(l)
+	        if(l) {
+		        if(strlen(lbl[1]) > 20)
+		        	lbl[1][20] = '\0';
 	        	gtk_notebook_set_tab_label_text(GTK_NOTEBOOK(tabster.notebook), GTK_WIDGET(((ContainerData*)l->data)->socket), lbl[1]);
+	        }
 			g_strfreev(lbl);	        
 	    }
 
@@ -283,13 +285,10 @@ int main(int argc, char **argv) {
 
 	setup_window();
 
-	
     mkfifo(fdfn, 0766);
     tabster.fifofd = open(fdfn, O_NONBLOCK);
 
     g_timeout_add(100, checkfifo, NULL);
-
-    // printf("%d\n", tabster.fifofd);
 
 	gtk_main();
 
