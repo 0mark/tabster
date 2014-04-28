@@ -28,7 +28,6 @@
 #include <glib.h>
 
 struct ContainerData_ {
-	int id;
 	GtkWidget* socket;
 	int pid;
 	gchar* restore_cmd;
@@ -59,8 +58,8 @@ static void die(const char *errstr, ...);
 static void setup_window();
 static gboolean checkfifo(gpointer data);
 
-static GtkTreeRowReference* new_tab_page(GtkWidget *, gboolean as_child);
 static ContainerData* new_socket_for_plug();
+static GtkTreeRowReference* new_tab_page(GtkWidget *, gboolean as_child);
 static int spawn(gchar* cmd, int socket);
 static void spawn_new_tab(gchar* cmd, gboolean in_background, gboolean as_child);
 
@@ -90,21 +89,21 @@ void die(const char *errstr, ...) {
 
 void setup_window() {
 	// ** create tree view
-	tabster.tabtree = GTK_TREE_VIEW(gtk_tree_view_new());
+	tabster.tabtree = GTK_TREE_VIEW(gtk_tree_view_new()); // FREE
 	// connect signals
     g_signal_connect(tabster.tabtree, "cursor-changed", G_CALLBACK(row_clicked_cb), NULL);
 	// style
     gtk_widget_set_can_focus(GTK_WIDGET(tabster.tabtree), FALSE);
     gtk_tree_view_set_headers_visible(tabster.tabtree, FALSE);
     // * add tree store
-    tabster.tabmodel = gtk_tree_store_new(1, G_TYPE_STRING);
+    tabster.tabmodel = gtk_tree_store_new(1, G_TYPE_STRING); // FREE
     gtk_tree_view_set_model(tabster.tabtree, GTK_TREE_MODEL(tabster.tabmodel));
     // * add cell renderer
-    GtkCellRenderer* trenderer = gtk_cell_renderer_text_new();
+    GtkCellRenderer* trenderer = gtk_cell_renderer_text_new(); // FREE
     gtk_tree_view_insert_column_with_attributes(tabster.tabtree, -1, "", trenderer, "text", 0, NULL);
 
     // ** create notebook
-	tabster.notebook = gtk_notebook_new();
+	tabster.notebook = gtk_notebook_new(); // FREE
 	// connect signals
 	g_signal_connect(tabster.notebook, "page-removed", G_CALLBACK(page_removed_cb), (gpointer)&tabster);
 	// style
@@ -115,7 +114,7 @@ void setup_window() {
 	gtk_notebook_set_show_tabs(GTK_NOTEBOOK(tabster.notebook), FALSE);
 
 	// ** create pane
-    GtkPaned* pane = GTK_PANED(gtk_hpaned_new());
+    GtkPaned* pane = GTK_PANED(gtk_hpaned_new()); // FREE
     // style
     gtk_paned_set_position(pane, 200);
     // add widgets
@@ -123,7 +122,7 @@ void setup_window() {
     gtk_paned_add2(pane, GTK_WIDGET(tabster.notebook));
 
 	// ** create window
-	tabster.window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+	tabster.window = gtk_window_new(GTK_WINDOW_TOPLEVEL); // FREE
 	// connect signals
 	g_signal_connect(tabster.window, "delete-event", gtk_main_quit, NULL);
 	// style
@@ -146,31 +145,26 @@ gboolean checkfifo(gpointer data) {
 
     // do something
     if(c) {
+    	// terminate command
     	tabster.fifobuf[c] = '\0';
-        printf("-%s-\n", tabster.fifobuf);
         // split command line at first space symbol
-        gchar** cmd = g_strsplit(tabster.fifobuf, " ", 2);
+        gchar** cmd = g_strsplit(tabster.fifobuf, " ", 2); // FREE
     	g_strstrip(cmd[0]);
 	    if(cmd[1]) g_strstrip(cmd[1]);
+
+        printf("-%s-\n", tabster.fifobuf);
 	    
-	    if(!g_strcmp0(cmd[0], "new")) {
+	    if(!g_strcmp0(cmd[0], "new"))
 	    	spawn_new_tab(cmd[1], FALSE, FALSE);
-	    }
-
-	    if(!g_strcmp0(cmd[0], "cnew")) {
+	    if(!g_strcmp0(cmd[0], "cnew"))
 	    	spawn_new_tab(cmd[1], FALSE, TRUE);
-	    }
-
-	    if(!g_strcmp0(cmd[0], "bnew")) {
+	    if(!g_strcmp0(cmd[0], "bnew"))
 	    	spawn_new_tab(cmd[1], TRUE, FALSE);
-	    }
-
-	    if(!g_strcmp0(cmd[0], "bcnew")) {
+	    if(!g_strcmp0(cmd[0], "bcnew"))
 	    	spawn_new_tab(cmd[1], TRUE, TRUE);
-	    }
 
 	    if(!g_strcmp0(cmd[0], "tabtitle")) {
-	        gchar** lbl = g_strsplit(cmd[1], " ", 2);
+	        gchar** lbl = g_strsplit(cmd[1], " ", 2); // FREE
 	        int pid = atoi(lbl[0]);
 	        GList* l = g_list_find_custom(tabster.socket_list, &pid, by_pid);
 	        if(l) {
@@ -180,9 +174,9 @@ gboolean checkfifo(gpointer data) {
         		GtkTreePath* p = gtk_tree_row_reference_get_path(r);
         		gtk_tree_model_get_iter(GTK_TREE_MODEL(tabster.tabmodel), &iter, p);
         		gtk_tree_store_set(GTK_TREE_STORE(tabster.tabmodel), &iter, 0, lbl[1], -1);
-
+        		gtk_tree_path_free(p);
 	        }
-			g_strfreev(lbl);	        
+			g_strfreev(lbl);
 	    }
 
 	    if(!g_strcmp0(cmd[0], "restore_cmd")) {
@@ -254,6 +248,14 @@ gboolean checkfifo(gpointer data) {
     return TRUE;
 }
 
+ContainerData* new_socket_for_plug() {
+	ContainerData *cd;
+	XALLOC(cd, ContainerData, 1); // FREE
+	cd->socket = gtk_socket_new(); // FREE
+
+	return cd;
+}
+
 GtkTreeRowReference* new_tab_page(GtkWidget *socket, gboolean as_child) {
 	gtk_widget_show(socket);
 	gtk_notebook_append_page(GTK_NOTEBOOK(tabster.notebook), socket, NULL);
@@ -297,18 +299,6 @@ GtkTreeRowReference* new_tab_page(GtkWidget *socket, gboolean as_child) {
 	gtk_tree_path_free(p);
 
     return ref;
-}
-
-ContainerData* new_socket_for_plug() {
-	ContainerData *cd;
-	static int __id;
-
-	XALLOC(cd, ContainerData, 1);
-
-	cd->id = ++__id;
-	cd->socket = gtk_socket_new();
-
-	return cd;
 }
 
 int spawn(gchar* cmd, int socket) {
