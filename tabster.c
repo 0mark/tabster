@@ -28,10 +28,11 @@
 #include <glib.h>
 
 struct ContainerData_ {
-	GtkWidget* socket;
+	GtkWidget *socket;
 	int pid;
-	gchar* restore_cmd;
-	GtkTreeRowReference* row;
+	GtkTreeRowReference *row;
+
+	gchar *restore_cmd;
 } typedef ContainerData;
 
 struct Tabster_ {
@@ -39,8 +40,8 @@ struct Tabster_ {
 	GtkWidget *notebook;
 	GtkWidget *vbox;
 
-    GtkTreeView* tabtree;
-    GtkTreeStore* tabmodel;
+    GtkTreeView *tabtree;
+    GtkTreeStore *tabmodel;
 
 	GList *socket_list;
 
@@ -59,18 +60,18 @@ static void setup_window();
 static gboolean checkfifo(gpointer data);
 static void parse_cmd();
 
-static ContainerData* new_socket_for_plug();
-static GtkTreeRowReference* new_tab_page(GtkWidget *, gboolean as_child);
-static int spawn(gchar* cmd, int socket);
-static void spawn_new_tab(gchar* cmd, gboolean in_background, gboolean as_child);
+static ContainerData *new_socket_for_plug();
+static GtkTreeRowReference *new_tab_page(GtkWidget *socket, gboolean as_child);
+static int spawn(gchar *cmd, int socket);
+static void spawn_new_tab(gchar *cmd, gboolean in_background, gboolean as_child);
 
-static ContainerData* get_cd_by_pid(gint pid);
-static ContainerData* get_nth_cd(gint n);
+static ContainerData *get_cd_by_pid(gint pid);
+static ContainerData *get_nth_cd(gint n);
 static void set_page(gint i);
 static void linear_step(int dir);
-static void get_iter_by_cd(ContainerData* cd, GtkTreeIter* iter);
-static void set_pid_tab_title(gint pid, gchar* title);
-static void set_pid_tab_restore(gint pid, gchar* restore);
+static gboolean get_iter_by_cd(ContainerData *cd, GtkTreeIter *iter);
+static void set_pid_tab_title(gint pid, gchar *title);
+static void set_pid_tab_restore(gint pid, gchar *restore);
 static void close_nth(gint n);
 
 static void page_removed_cb(GtkNotebook *, GtkWidget *, guint, gpointer);
@@ -106,7 +107,7 @@ void setup_window() {
     tabster.tabmodel = gtk_tree_store_new(1, G_TYPE_STRING); // FREE
     gtk_tree_view_set_model(tabster.tabtree, GTK_TREE_MODEL(tabster.tabmodel));
     // * add cell renderer
-    GtkCellRenderer* trenderer = gtk_cell_renderer_text_new(); // FREE
+    GtkCellRenderer *trenderer = gtk_cell_renderer_text_new(); // FREE
     gtk_tree_view_insert_column_with_attributes(tabster.tabtree, -1, "", trenderer, "text", 0, NULL);
 
     // ** create notebook
@@ -118,10 +119,10 @@ void setup_window() {
 	gtk_notebook_set_scrollable(GTK_NOTEBOOK(tabster.notebook), TRUE);
 	gtk_notebook_set_tab_border(GTK_NOTEBOOK(tabster.notebook), 1);
 	gtk_notebook_set_tab_pos (GTK_NOTEBOOK(tabster.notebook), GTK_POS_LEFT);
-	gtk_notebook_set_show_tabs(GTK_NOTEBOOK(tabster.notebook), FALSE);
+	gtk_notebook_set_show_tabs(GTK_NOTEBOOK(tabster.notebook), TRUE); // TODO FALSE
 
 	// ** create pane
-    GtkPaned* pane = GTK_PANED(gtk_hpaned_new()); // FREE
+    GtkPaned *pane = GTK_PANED(gtk_hpaned_new()); // FREE
     // style
     gtk_paned_set_position(pane, 200);
     // add widgets
@@ -239,7 +240,7 @@ void parse_cmd() {
 	*tabster.fifobuf = '\0';
 }
 
-ContainerData* new_socket_for_plug() {
+ContainerData *new_socket_for_plug() {
 	ContainerData *cd;
 
 	XALLOC(cd, ContainerData, 1); // FREED
@@ -248,38 +249,37 @@ ContainerData* new_socket_for_plug() {
 	return cd;
 }
 
-GtkTreeRowReference* new_tab_page(GtkWidget *socket, gboolean as_child) {
+GtkTreeRowReference *new_tab_page(GtkWidget *socket, gboolean as_child) {
+    GtkTreeIter iter, *piter;
+	GtkTreePath *p;
+
+	// display plug
 	gtk_widget_show(socket);
 	gtk_notebook_append_page(GTK_NOTEBOOK(tabster.notebook), socket, NULL);
 
-    GtkTreeIter iter;
-	GtkTreePath* p;
-
+	// get gtk_tree_path of current tab (or create empty)
     gint parent_num = gtk_notebook_get_current_page(GTK_NOTEBOOK(tabster.notebook));
-    GList* l = g_list_nth(tabster.socket_list, parent_num);
+    GList *l = g_list_nth(tabster.socket_list, parent_num);
 	if(l) {
-    	GtkTreeRowReference* r = ((ContainerData*)l->data)->row;
-    	p = gtk_tree_row_reference_get_path(r);
+    	p = gtk_tree_row_reference_get_path(((ContainerData*)l->data)->row); //FREED
     } else {
-    	p = gtk_tree_path_new_from_indices(0, -1);
+    	p = gtk_tree_path_new_from_indices(0, -1); //FREED
     }
 
-    GtkTreeIter* piter;
     if(!as_child) {
+    	// get parent for new tab
     	if(gtk_tree_path_get_depth(p)>1) {
-    		printf("A\n");
     		gtk_tree_path_up(p);
-    		XALLOC(piter, GtkTreeIter, 1);
+    		XALLOC(piter, GtkTreeIter, 1); // FREED
 	        gtk_tree_model_get_iter(GTK_TREE_MODEL(tabster.tabmodel), piter, p);
     	} else {
-    		printf("B\n");
     		piter = NULL;
     	}
 	} else {
-   		printf("C\n");
-		XALLOC(piter, GtkTreeIter, 1);
+		XALLOC(piter, GtkTreeIter, 1); // FREED
         gtk_tree_model_get_iter(GTK_TREE_MODEL(tabster.tabmodel), piter, p);    	
     }
+    // append new row
     gtk_tree_store_append(GTK_TREE_STORE(tabster.tabmodel), &iter, piter);
     if(as_child)
     	gtk_tree_view_expand_row(tabster.tabtree, p, FALSE);
@@ -287,14 +287,15 @@ GtkTreeRowReference* new_tab_page(GtkWidget *socket, gboolean as_child) {
 	gtk_tree_path_free(p);
     p = gtk_tree_model_get_path(GTK_TREE_MODEL(tabster.tabmodel), &iter);
 
-    GtkTreeRowReference* ref = gtk_tree_row_reference_new(GTK_TREE_MODEL(tabster.tabmodel), p);
+    GtkTreeRowReference *ref = gtk_tree_row_reference_new(GTK_TREE_MODEL(tabster.tabmodel), p);
 	gtk_tree_path_free(p);
+	free(piter);
 
     return ref;
 }
 
-int spawn(gchar* cmd, int socket) {
-	gchar* xcmd = g_strdup_printf(cmd, socket); // FREED
+int spawn(gchar *cmd, int socket) {
+	gchar *xcmd = g_strdup_printf(cmd, socket); // FREED
     gint argc;
     gchar** argv = NULL;
     int pid;
@@ -309,8 +310,8 @@ int spawn(gchar* cmd, int socket) {
     return pid;
 }
 
-void spawn_new_tab(gchar* cmd, gboolean in_background, gboolean as_child) {
-	ContainerData* cd;
+void spawn_new_tab(gchar *cmd, gboolean in_background, gboolean as_child) {
+	ContainerData *cd;
 
 	cd = new_socket_for_plug();	    	
 	cd->row = new_tab_page(GTK_WIDGET(cd->socket), as_child); // FREED
@@ -322,8 +323,8 @@ void spawn_new_tab(gchar* cmd, gboolean in_background, gboolean as_child) {
 		set_page(g_list_length(tabster.socket_list) - 1);
 }
 
-ContainerData* get_cd_by_pid(gint pid) {
-    GList* l;
+ContainerData *get_cd_by_pid(gint pid) {
+    GList *l;
 
     l = g_list_find_custom(tabster.socket_list, &pid, by_pid);
 	if(l) {
@@ -332,8 +333,8 @@ ContainerData* get_cd_by_pid(gint pid) {
 	return NULL;
 }
 
-ContainerData* get_nth_cd(gint n) {
-	GList* l;
+ContainerData *get_nth_cd(gint n) {
+	GList *l;
 
 	l = g_list_nth(tabster.socket_list, n);
 	if(l) {
@@ -344,7 +345,7 @@ ContainerData* get_nth_cd(gint n) {
 
 void set_page(gint n) {
     GtkTreeIter iter;
-    ContainerData* cd;
+    ContainerData *cd;
 
     // select tab in notebook
 	gtk_notebook_set_current_page(GTK_NOTEBOOK(tabster.notebook), n);
@@ -353,21 +354,21 @@ void set_page(gint n) {
     cd = get_nth_cd(n);
     if(cd) {
     	get_iter_by_cd(cd, &iter);
-    	GtkTreeSelection* sel = gtk_tree_view_get_selection(tabster.tabtree); // NO FREE NEEDED
+    	GtkTreeSelection *sel = gtk_tree_view_get_selection(tabster.tabtree); // NO FREE NEEDED
     	gtk_tree_selection_select_iter(sel, &iter);
     }
 }
 
 void linear_step(int dir) {
-	gint page = gtk_notebook_get_current_page(GTK_NOTEBOOK(tabster.notebook));
-	GList* l = g_list_nth(tabster.socket_list, page);
-	if(l) {
-	    GtkTreeIter iter;
-	    ContainerData* cd = (ContainerData*)l->data;
-		GtkTreeRowReference* r = cd->row;
-		GtkTreePath* path = gtk_tree_row_reference_get_path(r);
-		gtk_tree_model_get_iter(GTK_TREE_MODEL(tabster.tabmodel), &iter, path);
+    GtkTreeIter iter;
+	ContainerData *cd;
+	GtkTreePath *path, *p = NULL;
+	GList *l;
 
+	cd = get_nth_cd(gtk_notebook_get_current_page(GTK_NOTEBOOK(tabster.notebook)));
+	if(cd) {
+		path = gtk_tree_row_reference_get_path(cd->row); // FREED
+		gtk_tree_model_get_iter(GTK_TREE_MODEL(tabster.tabmodel), &iter, path);
 
 		if(dir==STEP_NEXT) { // ** next
 			if(gtk_tree_model_iter_has_child(GTK_TREE_MODEL(tabster.tabmodel), &iter)) {
@@ -390,9 +391,7 @@ void linear_step(int dir) {
 					gtk_tree_model_get_iter(GTK_TREE_MODEL(tabster.tabmodel), &iter, path);
 				}
 			} else {
-				printf("A %d, %s\n", gtk_tree_path_get_depth(path), gtk_tree_path_to_string(path));
 				if(gtk_tree_path_get_depth(path)>1) {
-					printf("C\n");
 					gtk_tree_path_up(path);
 				} else {
 					gint lc = gtk_tree_model_iter_n_children(GTK_TREE_MODEL(tabster.tabmodel), NULL) - 1;
@@ -403,34 +402,33 @@ void linear_step(int dir) {
 		}
 
 	    int i = 0;
-	    for(GList* l = tabster.socket_list; l != NULL; l = g_list_next(l)) {
-	        ContainerData* cd = (ContainerData*)l->data;
-
-	        GtkTreeRowReference* r = cd->row;
-	        GtkTreePath* p = gtk_tree_row_reference_get_path(r);
-
+	    for(l = tabster.socket_list; l != NULL; l = g_list_next(l)) {
+	        p = gtk_tree_row_reference_get_path(((ContainerData*)l->data)->row); // FREED
 	        if(!gtk_tree_path_compare(path, p)) {
 	            set_page(i);
 	            break;
 	        }
 	        i++;
+			gtk_tree_path_free(p);
 	    }
 		gtk_tree_path_free(path);
 	}
 }
 
-void get_iter_by_cd(ContainerData* cd, GtkTreeIter* iter) {
-    GtkTreeRowReference* r;
-    GtkTreePath* p;
+gboolean get_iter_by_cd(ContainerData *cd, GtkTreeIter *iter) {
+    gboolean b;
+    GtkTreeRowReference *r;
+    GtkTreePath *p;
 
     r = cd->row;
 	p = gtk_tree_row_reference_get_path(r);
-	gtk_tree_model_get_iter(GTK_TREE_MODEL(tabster.tabmodel), iter, p);
+	b = gtk_tree_model_get_iter(GTK_TREE_MODEL(tabster.tabmodel), iter, p);
 	gtk_tree_path_free(p);    	
+	return b;
 }
 
-void set_pid_tab_title(gint pid, gchar* title) {
-    ContainerData* cd;
+void set_pid_tab_title(gint pid, gchar *title) {
+    ContainerData *cd;
     GtkTreeIter iter;
 
     cd = get_cd_by_pid(pid);
@@ -440,8 +438,8 @@ void set_pid_tab_title(gint pid, gchar* title) {
     }
 }
 
-void set_pid_tab_restore(gint pid, gchar* restore) {
-    ContainerData* cd;
+void set_pid_tab_restore(gint pid, gchar *restore) {
+    ContainerData *cd;
 
     cd = get_cd_by_pid(pid);
     if(cd) {
@@ -456,46 +454,76 @@ void close_nth(gint n) {
 }
 
 void page_removed_cb(GtkNotebook *nb, GtkWidget *widget, guint id, gpointer data) {
-	GtkTreeIter iter;
-	GList* l;
+	gboolean has_child;
+	gint i;
+	GtkTreeIter iter, citer;
+	GList *l;
+	GtkTreePath *path, *p;
+	ContainerData *cd, *cd2;
 
 	l = g_list_find_custom(tabster.socket_list, widget, by_widget);
 	if(l) {
-		ContainerData* cd = (ContainerData*)l->data;
+		cd = (ContainerData*)l->data;
 
 		// close pid
 		g_spawn_close_pid(cd->pid);
 		// free restore_cmd
 		g_free(cd->restore_cmd);
-		// free ContainerData     TODO: doesnt g_list_remove does that?
-		g_free(cd);
-		// remove list element
+		// remove element from list
 		tabster.socket_list = g_list_remove(tabster.socket_list, l->data);
+
+		// test for child nodes
+	    get_iter_by_cd(cd, &iter);
+	    has_child = gtk_tree_model_iter_has_child(GTK_TREE_MODEL(tabster.tabmodel), &iter);
+	    // remove child nodes
+	    if(has_child) {
+	    	// one by one
+	    	i = gtk_tree_model_iter_n_children(GTK_TREE_MODEL(tabster.tabmodel), &iter) - 1;
+	    	for(;i>=0;i--) {
+	    		gtk_tree_model_iter_nth_child(GTK_TREE_MODEL(tabster.tabmodel), &citer, &iter, i);
+				path = gtk_tree_model_get_path(GTK_TREE_MODEL(tabster.tabmodel), &citer);
+			    // find cd by path
+			    for(l = tabster.socket_list; l != NULL; l = g_list_next(l)) {
+			        cd2 = (ContainerData*)l->data;
+			        p = gtk_tree_row_reference_get_path(cd2->row); // FREED
+			        if(!gtk_tree_path_compare(path, p)) {
+						// remove page (heere is the iteration!)
+						gtk_notebook_remove_page(GTK_NOTEBOOK(tabster.notebook), gtk_notebook_page_num(GTK_NOTEBOOK(tabster.notebook), GTK_WIDGET(cd2->socket)));
+			            break;
+			        }
+					gtk_tree_path_free(p);
+			    }
+				gtk_tree_path_free(path);
+	    	}
+        }
+
 	    // remove tree
 	    get_iter_by_cd(cd, &iter);
 		gtk_tree_store_remove(GTK_TREE_STORE(tabster.tabmodel), &iter);
-				// TODO: close all pages below iter
+		// free ContainerData
+		g_free(cd);
+
 		// quit if list is empty
 		if(!g_list_length(tabster.socket_list)) {
 			g_list_free(tabster.socket_list);
 			gtk_main_quit();
 		}
+
 	}
 }
 
 void row_clicked_cb(GtkTreeView *view, gpointer data) {
     GtkTreeIter iter;
-    GtkTreeSelection* sel = gtk_tree_view_get_selection(tabster.tabtree);
+    GtkTreeSelection *sel = gtk_tree_view_get_selection(tabster.tabtree);
     gtk_tree_selection_get_selected(sel, NULL, &iter);
-    GtkTreePath* path = gtk_tree_model_get_path(GTK_TREE_MODEL(tabster.tabmodel), &iter);
+    GtkTreePath *path = gtk_tree_model_get_path(GTK_TREE_MODEL(tabster.tabmodel), &iter);
 
     int i = 0;
-    for(GList* l = tabster.socket_list; l != NULL; l = g_list_next(l)) {
-        // UzblInstance* uz = (UzblInstance*)l->data;
-        ContainerData* cd = (ContainerData*)l->data;
+    for(GList *l = tabster.socket_list; l != NULL; l = g_list_next(l)) {
+        ContainerData *cd = (ContainerData*)l->data;
 
-        GtkTreeRowReference* r = cd->row;
-        GtkTreePath* p = gtk_tree_row_reference_get_path(r);
+        GtkTreeRowReference *r = cd->row;
+        GtkTreePath *p = gtk_tree_row_reference_get_path(r);
 
         if(!gtk_tree_path_compare(path, p)) {
             set_page(i);
@@ -514,10 +542,10 @@ gint by_widget(gconstpointer data, gconstpointer widget) {
 
 int main(int argc, char **argv) {
 	gboolean version = FALSE;
-	GError* error = NULL;
+	GError *error = NULL;
 	int pid = getpid();
-	gchar* fdfn = g_strdup_printf("/tmp/tabster%d", pid);
-	gchar* env_pid = g_strdup_printf("TABSTER_PID=%d", pid);
+	gchar *fdfn = g_strdup_printf("/tmp/tabster%d", pid);
+	gchar *env_pid = g_strdup_printf("TABSTER_PID=%d", pid);
 	putenv(env_pid);
 
 	GOptionEntry cmdline_ops[] = {
