@@ -367,7 +367,6 @@ ContainerData *get_cd_by(gconstpointer data, GCompareFunc func) {
 }
 
 ContainerData *get_cd_by_iter(GtkTreeIter *iter) {
-    // GList *l;
     GtkTreePath *path;
     ContainerData *cd;
 

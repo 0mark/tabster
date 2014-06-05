@@ -1,5 +1,7 @@
 #!/bin/bash
 
+xdd=${XDG_CONFIG_HOME:-${HOME}/.config}/tabster/
+
 tabster &
 TABSTER_PID=$!
 
@@ -7,10 +9,14 @@ while [ ! -p /tmp/tabster$TABSTER_PID ]; do
   sleep 0.1
 done
 
-if [ -f /home/mark/.local/share/uzbl/tabster.sess ]; then
-    cat /home/mark/.local/share/uzbl/tabster.sess > /tmp/tabster$TABSTER_PID
+if [ ! -d ${xdd} ]; then
+    mkdir -p $xdd
+fi
+
+if [ -f ${xdd}tabster.sess ]; then
+    cat ${xdd}tabster.sess > /tmp/tabster$TABSTER_PID
 else
-    echo "new uzbl -s %d" > /tmp/tabster$TABSTER_PID
+    echo "new reuzbl -s %d" > /tmp/tabster$TABSTER_PID
 fi
 
 sleep 1

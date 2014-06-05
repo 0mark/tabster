@@ -32,6 +32,8 @@ install:
 	@echo installing executable file to ${DESTDIR}${PREFIX}/bin
 	@mkdir -p ${DESTDIR}${PREFIX}/bin
 	@cp -f tabster ${DESTDIR}${PREFIX}/bin
+	@cp -f tazbl ${DESTDIR}${PREFIX}/bin
 
 uninstall:
 	rm ${DESTDIR}${PREFIX}/bin/tabster
+	rm ${DESTDIR}${PREFIX}/bin/tazbl

@@ -3,6 +3,7 @@ TODO
 
  - fix static pathes and shit
  - add missing commands
+
  - support "stupid" plugs
   - Hook into PropertyNotify event of child widgets (GtkSocket) and listen
     for title change to reflect tab title.
